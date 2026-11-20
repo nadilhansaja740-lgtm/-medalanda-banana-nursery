@@ -1,8 +1,0 @@
-{
-  "rules": {
-    "banana_nursery": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    }
-  }
-}
