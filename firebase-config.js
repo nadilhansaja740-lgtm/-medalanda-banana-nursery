@@ -1,7 +1,7 @@
 
 // Firebase Web App configuration
 const firebaseConfig = {
-  apiKey: "ඔයාගේ Firebase API KEY එක",
+  apiKey: "AIzaSyCzleF5wscIpFurlMkaoVF8Wht73SuDOGA",
   authDomain: "agri-system-8ea74.firebaseapp.com",
   databaseURL: "https://agri-system-8ea74-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "agri-system-8ea74",
