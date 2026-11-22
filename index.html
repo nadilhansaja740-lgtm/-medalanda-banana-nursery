@@ -38,6 +38,15 @@
         <article class="stat"><span>Total Sold</span><strong id="totalSold">0</strong></article>
         <article class="stat"><span>Propagator</span><strong id="propCount">0</strong></article>
       </div>
+      <div class="panel"><div class="panel-head"><h3>Propagator Status</h3><small>3 physical units</small></div><div id="propCards" class="prop-grid"></div></div>
+      <div class="stats extra-stats">
+        <article class="stat"><span>Nursery Stock</span><strong id="nurseryStock">0</strong></article>
+        <article class="stat"><span>Due / Overdue Batches</span><strong id="dueBatches">0</strong></article>
+        <article class="stat"><span>Today’s Tasks</span><strong id="taskCount">0</strong></article>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>Upcoming Propagator Alerts</h3><button class="small-btn" data-go="batches">View batches</button></div><div id="alertsList" class="alert-list"></div></div>
+      <div class="panel"><div class="panel-head"><h3>Stock by Variety</h3><small>Available plants</small></div><div id="varietyChart" class="bar-chart"></div></div>
+      <div class="panel"><div class="panel-head"><h3>Daily Tasks</h3></div><form id="taskForm" class="task-form"><input id="taskTitle" placeholder="Add a nursery task…" required><input id="taskDate" type="date" required><button class="primary">Add Task</button></form><div id="taskList" class="task-list"></div></div>
       <div class="panel"><div class="panel-head"><h3>Batch Stock Overview</h3><button class="small-btn" data-go="batches">Manage batches</button></div><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Variety</th><th>Potting date</th><th>Stage</th><th>Available</th><th>Propagator end</th></tr></thead><tbody id="dashRows"></tbody></table></div></div>
     </section>
     <section id="batchesPage" class="page hidden">
@@ -48,7 +57,7 @@
         <label>Initial potting count<input id="initialCount" type="number" min="1" required></label>
         <label>Notes<input id="batchNotes" placeholder="Optional notes"></label><button class="primary">Save Batch</button>
       </form></div>
-      <div class="panel"><h3>All Batches</h3><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Variety</th><th>Potting date</th><th>Initial</th><th>Available</th><th>Stage</th><th>Action</th></tr></thead><tbody id="batchRows"></tbody></table></div></div>
+      <div class="panel"><h3>All Batches</h3><div class="batch-tools"><input id="batchSearch" placeholder="Search batch, variety, date…"><select id="stageFilter"><option value="">All stages</option><option>Propagator</option><option>Nursery</option></select></div><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Variety</th><th>Potting date</th><th>Initial</th><th>Available</th><th>Stage</th><th>Action</th></tr></thead><tbody id="batchRows"></tbody></table></div></div>
       <div id="batchDetail" class="panel hidden"></div>
     </section>
     <section id="salesPage" class="page hidden">
@@ -71,7 +80,7 @@
       <div class="panel"><h3>Team</h3><div id="teamCards" class="team-grid"></div></div>
     </section>
     <section id="reportsPage" class="page hidden">
-      <div class="panel"><h3>Reports</h3><p>පහත වාර්තා Browser Print → Save as PDF ලෙස PDF කරගන්න.</p><div class="report-actions"><button class="primary" onclick="window.print()">Print / Save PDF</button><button class="small-btn" id="exportCsv">Export Batch CSV</button></div><div id="reportSummary"></div></div>
+      <div class="panel"><h3>Reports & Backup</h3><p>Browser Print → Save as PDF හෝ CSV export භාවිතා කරන්න.</p><div class="report-actions"><button class="primary" onclick="window.print()">Print / Save PDF</button><button class="small-btn" id="exportCsv">Batch CSV</button><button class="small-btn" id="exportSalesCsv">Sales CSV</button><button class="small-btn" id="exportAppsCsv">Applications CSV</button><button class="small-btn" id="backupJson">Download Data Backup</button></div><div id="reportSummary"></div><div class="panel-head"><h3>Variety Stock Report</h3></div><div id="varietyReport"></div></div>
     </section>
     <section id="settingsPage" class="page hidden"><div class="panel"><h3>Nursery Information</h3><p><b>Business:</b> Medalanda Agro bio tech Banana Nusare</p><p><b>Owner:</b> Mr. Wijekon</p><p><b>Teacher:</b> Arjuni Miss</p><p><b>Developer:</b> Nadil Hansaja</p><p><b>Staff:</b> 3 members</p><p class="muted">මෙම project එක Firebase Realtime Database භාවිතා කරයි.</p></div></section>
   </main>
