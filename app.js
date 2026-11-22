@@ -1,640 +1,153 @@
 /* Medalanda Banana Nursery - Firebase Realtime Database */
-
 const $ = id => document.getElementById(id);
 const ROOT = "banana_nursery";
-
-let db, auth, batches = {}, sales = {}, applications = {}, team = {};
-
-const today = new Date().toISOString().slice(0, 10);
-
-["pottingDate", "saleDate", "appDate"].forEach(id => {
-  if ($(id)) $(id).value = today;
-});
-
-function readyConfig() {
-  return typeof firebaseConfig !== "undefined" &&
-    firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("PASTE_") &&
-    firebaseConfig.appId && !firebaseConfig.appId.includes("PASTE_");
+let db, auth, batches={}, sales={}, applications={}, team={};
+const today = new Date().toISOString().slice(0,10);
+["pottingDate","saleDate","appDate"].forEach(id=>$(id).value=today);
+function readyConfig(){
+ return typeof firebaseConfig !== "undefined" &&
+  firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("PASTE_") &&
+  firebaseConfig.appId && !firebaseConfig.appId.includes("PASTE_");
 }
-
 if (!readyConfig()) {
-  $("loginMsg").textContent =
-    "Firebase config එක සම්පූර්ණ නැහැ. firebase-config.js තුළ Firebase Console එකෙන් ලබාගත් apiKey සහ appId දාන්න.";
+ $("loginMsg").textContent="Firebase config එක සම්පූර්ණ නැහැ. firebase-config.js තුළ Firebase Console එකෙන් ලබාගත් apiKey සහ appId දාන්න.";
 } else {
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-
-    auth = firebase.auth();
-    db = firebase.database();
-
-    auth.onAuthStateChanged(user => {
-      $("loginView").classList.toggle("hidden", !!user);
-      $("appView").classList.toggle("hidden", !user);
-
-      if (user) startApp();
-    });
-
-  } catch (err) {
-    $("loginMsg").textContent =
-      "Firebase ආරම්භ කිරීමේ දෝෂයක්: " + err.message;
-  }
+ try {
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth();
+  db=firebase.database();
+  auth.onAuthStateChanged(user=>{
+   $("loginView").classList.toggle("hidden",!!user);
+   $("appView").classList.toggle("hidden",!user);
+   if(user) startApp();
+  });
+ } catch(err) {
+  $("loginMsg").textContent="Firebase ආරම්භ කිරීමේ දෝෂයක්: "+err.message;
+ }
 }
-
-$("loginForm").addEventListener("submit", async e => {
-  e.preventDefault();
-
-  if (!auth) {
-    $("loginMsg").textContent =
-      "Login කිරීමට පෙර firebase-config.js හි Firebase Web App config එක සම්පූර්ණ කරන්න.";
-    return;
-  }
-
-  try {
-    await auth.signInWithEmailAndPassword(
-      $("email").value.trim(),
-      $("password").value
-    );
-  } catch (err) {
-    $("loginMsg").textContent = err.message;
-  }
+$("loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ if(!auth) {
+  $("loginMsg").textContent="Login කිරීමට පෙර firebase-config.js හි Firebase Web App config එක සම්පූර්ණ කරන්න.";
+  return;
+ }
+ try {
+  await auth.signInWithEmailAndPassword($("email").value.trim(),$("password").value);
+ } catch(err) {
+  $("loginMsg").textContent=err.message;
+ }
 });
-
-$("logoutBtn").onclick = () => auth.signOut();
-
-function path(p) {
-  return db.ref(`${ROOT}/${p}`);
+$("logoutBtn").onclick=()=>auth.signOut();
+function path(p){return db.ref(`${ROOT}/${p}`)}
+function notify(msg,error=false){$("notice").textContent=msg;$("notice").classList.remove("hidden");$("notice").classList.toggle("error",error);setTimeout(()=>$("notice").classList.add("hidden"),4500)}
+function values(obj){return Object.entries(obj||{}).map(([id,v])=>({id,...v}));}
+function fmt(n){return Number(n||0).toLocaleString("en-US")}
+function dateAdd(d,days){let x=new Date(d+"T12:00:00");x.setDate(x.getDate()+days);return x.toISOString().slice(0,10)}
+function startApp(){
+ path("batches").on("value",s=>{batches=s.val()||{};render();});
+ path("sales").on("value",s=>{sales=s.val()||{};render();});
+ path("applications").on("value",s=>{applications=s.val()||{};render();});
+ path("team").on("value",s=>{team=s.val()||{};render();});
 }
-
-function notify(msg, error = false) {
-  $("notice").textContent = msg;
-  $("notice").classList.remove("hidden");
-  $("notice").classList.toggle("error", error);
-
-  setTimeout(() => $("notice").classList.add("hidden"), 4500);
+function batchStock(b){return Number(b.initialCount||0)+Number(b.adjustmentTotal||0)-Number(b.soldTotal||0)}
+function batchDisplayLabel(b){
+ const duplicates=values(batches).filter(x=>x.variety===b.variety&&Number(x.batchNo)===Number(b.batchNo));
+ return duplicates.length>1 ? `${b.variety} ${b.batchNo} (${b.pottingDate||"date unknown"})` : `${b.variety} ${b.batchNo}`;
 }
-
-function values(obj) {
-  return Object.entries(obj || {}).map(([id, v]) => ({ id, ...v }));
+function render(){
+ const bs=values(batches), ss=values(sales), apps=values(applications), ts=values(team);
+ $("totalStock").textContent=fmt(bs.reduce((a,b)=>a+batchStock(b),0));
+ $("totalBatches").textContent=fmt(bs.length);$("totalSold").textContent=fmt(ss.reduce((a,x)=>a+Number(x.quantity||0),0));
+ $("propCount").textContent=fmt(bs.filter(b=>b.stage==="Propagator").length);
+ const rows=bs.map(b=>`<tr><td>${esc(batchDisplayLabel(b))}</td><td>${esc(b.variety)}</td><td>${esc(b.pottingDate)}</td><td><span class="pill">${esc(b.stage||"Propagator")}</span></td><td>${fmt(batchStock(b))}</td><td>${esc(b.propagatorEnd||"")}</td></tr>`).join("");
+ $("dashRows").innerHTML=rows||empty(6); $("batchRows").innerHTML=bs.map(b=>`<tr><td>${esc(batchDisplayLabel(b))}</td><td>${esc(b.variety)}</td><td>${esc(b.pottingDate)}</td><td>${fmt(b.initialCount)}</td><td>${fmt(batchStock(b))}</td><td>${esc(b.stage)}</td><td><button class="small-btn" onclick="openBatch('${b.id}')">Manage</button></td></tr>`).join("")||empty(7);
+ const opts=bs.map(b=>`<option value="${b.id}">${esc(batchDisplayLabel(b))} — ${fmt(batchStock(b))} plants</option>`).join("");
+ $("saleBatch").innerHTML=opts;$("appBatch").innerHTML=opts;
+ $("salesRows").innerHTML=ss.sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel)}</td><td>${esc(x.buyer||"")}</td><td>${fmt(x.quantity)}</td><td>${esc(x.notes||"")}</td></tr>`).join("")||empty(5);
+ $("appRows").innerHTML=apps.sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel)}</td><td>${esc(x.type)}</td><td>${esc(x.product)}</td><td>${esc(x.quantity)} ${esc(x.unit||"")}</td><td>${esc(x.notes||"")}</td></tr>`).join("")||empty(6);
+ $("teamCards").innerHTML=ts.map(x=>`<article class="team-card"><b>${esc(x.name)}</b><span>${esc(x.role)}</span><small>${esc(x.phone||"")}</small></article>`).join("")||"<p>No team members added yet.</p>";
+ $("reportSummary").innerHTML=`<p>Total batches: <b>${bs.length}</b></p><p>Available plants: <b>${fmt(bs.reduce((a,b)=>a+batchStock(b),0))}</b></p><p>Sales records: <b>${ss.length}</b></p><p>Fertilizer / chemical records: <b>${apps.length}</b></p>`;
 }
-
-function fmt(n) {
-  return Number(n || 0).toLocaleString("en-US");
-}
-
-function dateAdd(d, days) {
-  let x = new Date(d + "T12:00:00");
-  x.setDate(x.getDate() + days);
-  return x.toISOString().slice(0, 10);
-}
-
-function startApp() {
-  path("batches").on("value", s => {
-    batches = s.val() || {};
-    render();
-  });
-
-  path("sales").on("value", s => {
-    sales = s.val() || {};
-    render();
-  });
-
-  path("applications").on("value", s => {
-    applications = s.val() || {};
-    render();
-  });
-
-  path("team").on("value", s => {
-    team = s.val() || {};
-    render();
-  });
-}
-
-function batchStock(b) {
-  return Number(b.initialCount || 0) +
-    Number(b.adjustmentTotal || 0) -
-    Number(b.soldTotal || 0);
-}
-
-/* ========================================
-   PROPAGATOR COUNTER
-   එක් Batch එකක් = භාවිතයේ ඇති Propagator එකක්
-   උපරිම Propagator ගණන = 3
-======================================== */
-
-function usedPropagators() {
-  return values(batches).filter(b => b.stage === "Propagator").length;
-}
-
-function freePropagators() {
-  return Math.max(0, 3 - usedPropagators());
-}
-
-function batchDisplayLabel(b) {
-  const duplicates = values(batches).filter(
-    x => x.variety === b.variety &&
-      Number(x.batchNo) === Number(b.batchNo)
-  );
-
-  return duplicates.length > 1
-    ? `${b.variety} ${b.batchNo} (${b.pottingDate || "date unknown"})`
-    : `${b.variety} ${b.batchNo}`;
-}
-
-/* ========================================
-   DASHBOARD
-======================================== */
-
-function render() {
-  const bs = values(batches);
-  const ss = values(sales);
-  const apps = values(applications);
-  const ts = values(team);
-
-  // Total available plant stock
-  $("totalStock").textContent = fmt(
-    bs.reduce((a, b) => a + batchStock(b), 0)
-  );
-
-  // Total batches
-  $("totalBatches").textContent = fmt(bs.length);
-
-  // Total sold plants
-  $("totalSold").textContent = fmt(
-    ss.reduce((a, x) => a + Number(x.quantity || 0), 0)
-  );
-
-  // FIX: Propagator count (not plant count)
-  // Maximum available Propagators = 3
-  $("propCount").textContent = fmt(
-    Math.min(3, usedPropagators())
-  );
-
-  // Dashboard batch rows
-  const rows = bs.map(b => `
-    <tr>
-      <td>${esc(batchDisplayLabel(b))}</td>
-      <td>${esc(b.variety)}</td>
-      <td>${esc(b.pottingDate)}</td>
-      <td><span class="pill">${esc(b.stage || "Propagator")}</span></td>
-      <td>${fmt(batchStock(b))}</td>
-      <td>${esc(b.propagatorEnd || "")}</td>
-    </tr>
-  `).join("");
-
-  $("dashRows").innerHTML = rows || empty(6);
-
-  // Batch management table
-  $("batchRows").innerHTML = bs.map(b => `
-    <tr>
-      <td>${esc(batchDisplayLabel(b))}</td>
-      <td>${esc(b.variety)}</td>
-      <td>${esc(b.pottingDate)}</td>
-      <td>${fmt(b.initialCount)}</td>
-      <td>${fmt(batchStock(b))}</td>
-      <td>${esc(b.stage)}</td>
-      <td>
-        <button class="small-btn" onclick="openBatch('${b.id}')">
-          Manage
-        </button>
-      </td>
-    </tr>
-  `).join("") || empty(7);
-
-  // Batch selection dropdowns
-  const opts = bs.map(b => `
-    <option value="${b.id}">
-      ${esc(batchDisplayLabel(b))} — ${fmt(batchStock(b))} plants
-    </option>
-  `).join("");
-
-  $("saleBatch").innerHTML = opts;
-  $("appBatch").innerHTML = opts;
-
-  // Sales records
-  $("salesRows").innerHTML = ss
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-    .map(x => `
-      <tr>
-        <td>${esc(x.date)}</td>
-        <td>${esc(batches[x.batchId]
-          ? batchDisplayLabel(batches[x.batchId])
-          : x.batchLabel)}</td>
-        <td>${esc(x.buyer || "")}</td>
-        <td>${fmt(x.quantity)}</td>
-        <td>${esc(x.notes || "")}</td>
-      </tr>
-    `).join("") || empty(5);
-
-  // Fertilizer / application records
-  $("appRows").innerHTML = apps
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-    .map(x => `
-      <tr>
-        <td>${esc(x.date)}</td>
-        <td>${esc(batches[x.batchId]
-          ? batchDisplayLabel(batches[x.batchId])
-          : x.batchLabel)}</td>
-        <td>${esc(x.type)}</td>
-        <td>${esc(x.product)}</td>
-        <td>${esc(x.quantity)} ${esc(x.unit || "")}</td>
-        <td>${esc(x.notes || "")}</td>
-      </tr>
-    `).join("") || empty(6);
-
-  // Team
-  $("teamCards").innerHTML = ts.map(x => `
-    <article class="team-card">
-      <b>${esc(x.name)}</b>
-      <span>${esc(x.role)}</span>
-      <small>${esc(x.phone || "")}</small>
-    </article>
-  `).join("") || "<p>No team members added yet.</p>";
-
-  // Reports
-  $("reportSummary").innerHTML = `
-    <p>Total batches: <b>${bs.length}</b></p>
-    <p>Available plants: <b>${fmt(bs.reduce((a,b) => a + batchStock(b), 0))}</b></p>
-    <p>Sales records: <b>${ss.length}</b></p>
-    <p>Fertilizer / chemical records: <b>${apps.length}</b></p>
-  `;
-}
-
-function empty(n) {
-  return `<tr><td colspan="${n}" class="empty">No records yet</td></tr>`;
-}
-
-function esc(v) {
-  return String(v ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[c]));
-}
-
-/* ========================================
-   ADD NEW BATCH
-======================================== */
-
-$("batchForm").onsubmit = async e => {
-  e.preventDefault();
-
-  const variety = $("variety").value;
-  const batchNo = Number($("batchNo").value);
-  const pottingDate = $("pottingDate").value;
-  const initialCount = Number($("initialCount").value);
-
-  // Propagator limit check
-  if (usedPropagators() >= 3) {
-    return notify(
-      "Propagator තුනම දැනට භාවිතයේ තියෙනවා. එකක් Nursery එකට මාරු කරලා නැවත Batch එකක් දාන්න.",
-      true
-    );
-  }
-
-  const data = {
-    variety,
-    batchNo,
-    pottingDate,
-    initialCount,
-    stage: "Propagator",
-    propagatorEnd: dateAdd(pottingDate, 14),
-    adjustmentTotal: 0,
-    soldTotal: 0,
-    notes: $("batchNotes").value,
-    createdAt: Date.now()
-  };
-
-  try {
-    let r = await path("batches").push(data);
-
-    await path(`history/${r.key}`).push({
-      type: "Potting",
-      date: pottingDate,
-      quantity: initialCount,
-      unit: "plants",
-      createdAt: Date.now()
-    });
-
-    e.target.reset();
-    $("pottingDate").value = today;
-
-    notify("Batch saved successfully.");
-
-  } catch (err) {
-    notify(err.message, true);
-  }
+function empty(n){return `<tr><td colspan="${n}" class="empty">No records yet</td></tr>`}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+$("batchForm").onsubmit=async e=>{e.preventDefault();const variety=$("variety").value,batchNo=Number($("batchNo").value),pottingDate=$("pottingDate").value,initialCount=Number($("initialCount").value);
+ const data={variety,batchNo,pottingDate,initialCount,stage:"Propagator",propagatorEnd:dateAdd(pottingDate,14),adjustmentTotal:0,soldTotal:0,notes:$("batchNotes").value,createdAt:Date.now()};
+ try{let r=await path("batches").push(data);await path(`history/${r.key}`).push({type:"Potting",date:pottingDate,quantity:initialCount,unit:"plants",createdAt:Date.now()});e.target.reset();$("pottingDate").value=today;notify("Batch saved successfully.");}catch(err){notify(err.message,true)}
 };
-
-/* ========================================
-   BATCH MANAGEMENT
-======================================== */
-
-window.openBatch = id => {
-  const b = batches[id];
-  if (!b) return;
-
-  const box = $("batchDetail");
-  box.classList.remove("hidden");
-
-  box.innerHTML = `
-    <div class="panel-head">
-      <h3>${esc(batchDisplayLabel(b))} — Batch Management</h3>
-      <button class="small-btn"
-        onclick="document.getElementById('batchDetail').classList.add('hidden')">
-        Close
-      </button>
-    </div>
-
-    <p>
-      Potting: ${esc(b.pottingDate)} |
-      Propagator end: ${esc(b.propagatorEnd)} |
-      Available: <b>${fmt(batchStock(b))}</b>
-    </p>
-
-    <form id="adjustForm" class="form-grid">
-      <label>
-        Action
-        <select id="adjType">
-          <option value="Nursery Count">Propagator Count / Move to Nursery</option>
-          <option value="Stock Add">Add stock</option>
-          <option value="Stock Loss">Record loss</option>
-          <option value="Correction">Stock correction (+/-)</option>
-        </select>
-      </label>
-
-      <label>
-        Quantity
-        <input id="adjQty" type="number" required>
-      </label>
-
-      <label>
-        Date
-        <input id="adjDate" type="date" value="${today}" required>
-      </label>
-
-      <label>
-        Notes
-        <input id="adjNotes">
-      </label>
-
-      <button class="primary">Save Stock Update</button>
-    </form>
-
-    <div id="historyRows"></div>
-  `;
-
-  // Batch history
-  path(`history/${id}`).once("value").then(s => {
-    let h = values(s.val()).sort(
-      (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
-    );
-
-    $("historyRows").innerHTML = "<h4>Batch History</h4>" +
-      h.map(x => `
-        <p class='history-line'>
-          ${esc(x.date)} · ${esc(x.type)} ·
-          ${esc(x.quantity)} ${esc(x.unit || "")} ·
-          ${esc(x.notes || "")}
-        </p>
-      `).join("");
-  });
-
-  // Stock update
-  $("adjustForm").onsubmit = async e => {
-    e.preventDefault();
-
-    let type = $("adjType").value;
-    let q = Number($("adjQty").value);
-    let date = $("adjDate").value;
-
-    if (!q) return notify("Quantity එක ඇතුළත් කරන්න.", true);
-
-    let delta = type === "Stock Loss"
-      ? -Math.abs(q)
-      : type === "Correction"
-        ? q
-        : Math.abs(q);
-
-    if (type === "Nursery Count") {
-      if (q > Number(b.initialCount || 0) + Number(b.adjustmentTotal || 0)) {
-        return notify(
-          "Count එක ආරම්භක/වත්මන් ගණනට වඩා වැඩියි. Correction භාවිතා කරන්න.",
-          true
-        );
-      }
-
-      delta = q - (
-        Number(b.initialCount || 0) +
-        Number(b.adjustmentTotal || 0)
-      );
-    }
-
-    if (batchStock(b) + delta < 0) {
-      return notify("Stock එක negative වෙන්න බැහැ.", true);
-    }
-
-    try {
-      // Moving a batch to Nursery releases one Propagator
-      const updatedStage = type === "Nursery Count"
-        ? "Nursery"
-        : b.stage;
-
-      await path(`batches/${id}`).update({
-        adjustmentTotal:
-          Number(b.adjustmentTotal || 0) + delta,
-        stage: updatedStage,
-        lastUpdated: Date.now()
-      });
-
-      await path(`history/${id}`).push({
-        type,
-        date,
-        quantity: q,
-        unit: "plants",
-        notes: $("adjNotes").value,
-        delta,
-        createdAt: Date.now()
-      });
-
-      notify("Stock updated.");
-
-    } catch (err) {
-      notify(err.message, true);
-    }
-  };
+window.openBatch=id=>{const b=batches[id];if(!b)return;const box=$("batchDetail");box.classList.remove("hidden");box.innerHTML=`<div class="panel-head"><h3>${esc(batchDisplayLabel(b))} — Batch Management</h3><button class="small-btn" onclick="document.getElementById('batchDetail').classList.add('hidden')">Close</button></div><p>Potting: ${esc(b.pottingDate)} | Propagator end: ${esc(b.propagatorEnd)} | Available: <b>${fmt(batchStock(b))}</b></p><form id="adjustForm" class="form-grid"><label>Action<select id="adjType"><option value="Nursery Count">Propagator Count / Move to Nursery</option><option value="Stock Add">Add stock</option><option value="Stock Loss">Record loss</option><option value="Correction">Stock correction (+/-)</option></select></label><label>Quantity<input id="adjQty" type="number" required></label><label>Date<input id="adjDate" type="date" value="${today}" required></label><label>Notes<input id="adjNotes"></label><button class="primary">Save Stock Update</button></form><div id="historyRows"></div>`;
+ path(`history/${id}`).once("value").then(s=>{let h=values(s.val()).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));$("historyRows").innerHTML="<h4>Batch History</h4>"+h.map(x=>`<p class='history-line'>${esc(x.date)} · ${esc(x.type)} · ${esc(x.quantity)} ${esc(x.unit||"")} · ${esc(x.notes||"")}</p>`).join("");});
+ $("adjustForm").onsubmit=async e=>{e.preventDefault();let type=$("adjType").value,q=Number($("adjQty").value),date=$("adjDate").value;if(!q)return notify("Quantity එක ඇතුළත් කරන්න.",true);
+ let delta=type==="Stock Loss"?-Math.abs(q):type==="Correction"?q:Math.abs(q);
+ if(type==="Nursery Count"){if(q>Number(b.initialCount||0)+Number(b.adjustmentTotal||0))return notify("Count එක ආරම්භක/වත්මන් ගණනට වඩා වැඩියි. Correction භාවිතා කරන්න.",true);delta=q-(Number(b.initialCount||0)+Number(b.adjustmentTotal||0));}
+ if(batchStock(b)+delta<0)return notify("Stock එක negative වෙන්න බැහැ.",true);
+ try{await path(`batches/${id}`).update({adjustmentTotal:Number(b.adjustmentTotal||0)+delta,stage:type==="Nursery Count"?"Nursery":b.stage,lastUpdated:Date.now()});await path(`history/${id}`).push({type,date,quantity:q,unit:"plants",notes:$("adjNotes").value,delta,createdAt:Date.now()});notify("Stock updated.");}catch(err){notify(err.message,true)}
+ };
 };
-
-/* ========================================
-   SALES
-======================================== */
-
-$("saleForm").onsubmit = async e => {
-  e.preventDefault();
-
-  let id = $("saleBatch").value;
-  let b = batches[id];
-  let q = Number($("saleQty").value);
-
-  if (!b) return notify("Batch එක තෝරන්න.", true);
-
-  if (q < 1 || q > batchStock(b)) {
-    return notify("ප්‍රමාණවත් stock නැහැ.", true);
-  }
-
-  try {
-    const record = {
-      batchId: id,
-      batchLabel: batchDisplayLabel(b),
-      date: $("saleDate").value,
-      quantity: q,
-      buyer: $("buyer").value,
-      notes: $("saleNotes").value,
-      createdAt: Date.now()
-    };
-
-    await path("sales").push(record);
-
-    await path(`batches/${id}`).update({
-      soldTotal: Number(b.soldTotal || 0) + q,
-      lastUpdated: Date.now()
-    });
-
-    await path(`history/${id}`).push({
-      type: "Sale",
-      date: record.date,
-      quantity: q,
-      unit: "plants",
-      notes: record.buyer,
-      createdAt: Date.now()
-    });
-
-    e.target.reset();
-    $("saleDate").value = today;
-
-    notify("Sale saved and stock reduced.");
-
-  } catch (err) {
-    notify(err.message, true);
-  }
+$("saleForm").onsubmit=async e=>{e.preventDefault();let id=$("saleBatch").value,b=batches[id],q=Number($("saleQty").value);if(!b)return notify("Batch එක තෝරන්න.",true);if(q<1||q>batchStock(b))return notify("ප්‍රමාණවත් stock නැහැ.",true);
+ try{const record={batchId:id,batchLabel:batchDisplayLabel(b),date:$("saleDate").value,quantity:q,buyer:$("buyer").value,notes:$("saleNotes").value,createdAt:Date.now()};await path("sales").push(record);await path(`batches/${id}`).update({soldTotal:Number(b.soldTotal||0)+q,lastUpdated:Date.now()});await path(`history/${id}`).push({type:"Sale",date:record.date,quantity:q,unit:"plants",notes:record.buyer,createdAt:Date.now()});e.target.reset();$("saleDate").value=today;notify("Sale saved and stock reduced.");}catch(err){notify(err.message,true)}
 };
+$("appForm").onsubmit=async e=>{e.preventDefault();let id=$("appBatch").value,b=batches[id];if(!b)return notify("Batch එක තෝරන්න.",true);try{await path("applications").push({batchId:id,batchLabel:batchDisplayLabel(b),type:$("appType").value,product:$("product").value,date:$("appDate").value,quantity:Number($("appQty").value),unit:$("appUnit").value,notes:$("appNotes").value,createdAt:Date.now()});e.target.reset();$("appDate").value=today;notify("Application record saved.");}catch(err){notify(err.message,true)}};
+$("teamForm").onsubmit=async e=>{e.preventDefault();try{await path("team").push({name:$("memberName").value,role:$("memberRole").value,phone:$("memberPhone").value,notes:$("memberNotes").value,createdAt:Date.now()});e.target.reset();notify("Team member saved.");}catch(err){notify(err.message,true)}};
+$("exportCsv").onclick=()=>{let rows=[["Batch Display","Variety","Batch Number","Potting Date","Initial Count","Available","Stage"],...values(batches).map(b=>[batchDisplayLabel(b),b.variety,b.batchNo,b.pottingDate,b.initialCount,batchStock(b),b.stage])];let csv=rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\n");let a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download="banana-nursery-batches.csv";a.click();URL.revokeObjectURL(a.href)};
+$("nav").onclick=e=>{let btn=e.target.closest("[data-page]");if(btn)showPage(btn.dataset.page)};
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showPage(b.dataset.go));
+function showPage(page){document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));$(page+"Page").classList.remove("hidden");document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===page));$("pageTitle").textContent=page.charAt(0).toUpperCase()+page.slice(1)}
 
-/* ========================================
-   APPLICATIONS
-======================================== */
-
-$("appForm").onsubmit = async e => {
-  e.preventDefault();
-
-  let id = $("appBatch").value;
-  let b = batches[id];
-
-  if (!b) return notify("Batch එක තෝරන්න.", true);
-
-  try {
-    await path("applications").push({
-      batchId: id,
-      batchLabel: batchDisplayLabel(b),
-      type: $("appType").value,
-      product: $("product").value,
-      date: $("appDate").value,
-      quantity: Number($("appQty").value),
-      unit: $("appUnit").value,
-      notes: $("appNotes").value,
-      createdAt: Date.now()
-    });
-
-    e.target.reset();
-    $("appDate").value = today;
-
-    notify("Application record saved.");
-
-  } catch (err) {
-    notify(err.message, true);
-  }
-};
-
-/* ========================================
-   TEAM
-======================================== */
-
-$("teamForm").onsubmit = async e => {
-  e.preventDefault();
-
-  try {
-    await path("team").push({
-      name: $("memberName").value,
-      role: $("memberRole").value,
-      phone: $("memberPhone").value,
-      notes: $("memberNotes").value,
-      createdAt: Date.now()
-    });
-
-    e.target.reset();
-    notify("Team member saved.");
-
-  } catch (err) {
-    notify(err.message, true);
-  }
-};
-
-/* ========================================
-   EXPORT CSV
-======================================== */
-
-$("exportCsv").onclick = () => {
-  let rows = [
-    ["Batch Display", "Variety", "Batch Number", "Potting Date", "Initial Count", "Available", "Stage"],
-    ...values(batches).map(b => [
-      batchDisplayLabel(b),
-      b.variety,
-      b.batchNo,
-      b.pottingDate,
-      b.initialCount,
-      batchStock(b),
-      b.stage
-    ])
-  ];
-
-  let csv = rows.map(r =>
-    r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")
-  ).join("\n");
-
-  let a = document.createElement("a");
-
-  a.href = URL.createObjectURL(
-    new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })
-  );
-
-  a.download = "banana-nursery-batches.csv";
-  a.click();
-
-  URL.revokeObjectURL(a.href);
-};
-
-/* ========================================
-   NAVIGATION
-======================================== */
-
-$("nav").onclick = e => {
-  let btn = e.target.closest("[data-page]");
-  if (btn) showPage(btn.dataset.page);
-};
-
-document.querySelectorAll("[data-go]").forEach(b => {
-  b.onclick = () => showPage(b.dataset.go);
-});
-
-function showPage(page) {
-  document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-
-  $(page + "Page").classList.remove("hidden");
-
-  document.querySelectorAll("#nav button").forEach(b => {
-    b.classList.toggle("active", b.dataset.page === page);
-  });
-
-  $("pageTitle").textContent =
-    page.charAt(0).toUpperCase() + page.slice(1);
+/* Dashboard enhancements: 3-unit Propagator, nursery stock, alerts, tasks, filters, analytics, reports and safe backup */
+const MAX_PROPAGATORS=3;
+let tasks={};
+function occupiedPropagators(excludeId=null){return values(batches).filter(b=>b.id!==excludeId&&Number(b.propagatorNo)>=1&&Number(b.propagatorNo)<=3&&b.stage==="Propagator"&&batchStock(b)>0).map(b=>Number(b.propagatorNo));}
+function getPropagatorCount(){return new Set(occupiedPropagators()).size;}
+function getFreePropagator(excludeId=null){const used=occupiedPropagators(excludeId);for(let i=1;i<=3;i++)if(!used.includes(i))return i;return null;}
+function startApp(){
+ path("batches").on("value",s=>{batches=s.val()||{};render();});
+ path("sales").on("value",s=>{sales=s.val()||{};render();});
+ path("applications").on("value",s=>{applications=s.val()||{};render();});
+ path("team").on("value",s=>{team=s.val()||{};render();});
+ path("tasks").on("value",s=>{tasks=s.val()||{};render();});
 }
+function render(){
+ const bs=values(batches),ss=values(sales),apps=values(applications),ts=values(team),tk=values(tasks);
+ const stock=bs.reduce((a,b)=>a+batchStock(b),0),sold=ss.reduce((a,x)=>a+Number(x.quantity||0),0);
+ const nurseryStock=bs.filter(b=>b.stage==="Nursery").reduce((a,b)=>a+batchStock(b),0);
+ const occupied=occupiedPropagators();
+ $("totalStock").textContent=fmt(stock);$("totalBatches").textContent=fmt(bs.length);$("totalSold").textContent=fmt(sold);$("propCount").textContent=fmt(getPropagatorCount());
+ if($("nurseryStock"))$("nurseryStock").textContent=fmt(nurseryStock);
+ const propCards=Array.from({length:3},(_,i)=>{const n=i+1,rec=bs.find(b=>Number(b.propagatorNo)===n&&b.stage==="Propagator"&&batchStock(b)>0);return `<article class="prop-card ${rec?'occupied':'free'}"><span class="prop-icon">${rec?'🌱':'○'}</span><div><b>Propagator ${n}</b><small>${rec?`Occupied · ${esc(batchDisplayLabel(rec))}`:'Available'}</small>${rec?`<strong>${fmt(batchStock(rec))} plants</strong><small>Ends: ${esc(rec.propagatorEnd||'—')}</small>`:''}</div></article>`}).join("");
+ if($("propCards"))$("propCards").innerHTML=propCards;
+ const due=bs.filter(b=>b.stage==="Propagator"&&b.propagatorEnd&&b.propagatorEnd<=today&&batchStock(b)>0);
+ if($("dueBatches"))$("dueBatches").textContent=fmt(due.length);
+ const alertItems=bs.filter(b=>b.stage==="Propagator"&&b.propagatorEnd&&batchStock(b)>0).sort((a,b)=>(a.propagatorEnd||'').localeCompare(b.propagatorEnd||'')).map(b=>{const days=Math.ceil((new Date(b.propagatorEnd+'T12:00:00')-new Date(today+'T12:00:00'))/86400000);return `<div class="alert-item ${days<0?'overdue':days===0?'today':'upcoming'}"><b>${esc(batchDisplayLabel(b))}</b><span>${days<0?`${Math.abs(days)} day(s) overdue`:days===0?'Due today':`${days} day(s) left`}</span><small>End date: ${esc(b.propagatorEnd)}</small></div>`});
+ if($("alertsList"))$("alertsList").innerHTML=alertItems.join("")||'<p class="empty-note">No upcoming Propagator alerts.</p>';
+ const varieties={};bs.forEach(b=>{const k=b.variety||'Other';varieties[k]=(varieties[k]||0)+Math.max(0,batchStock(b));});
+ if($("varietyChart"))$("varietyChart").innerHTML=Object.entries(varieties).sort((a,b)=>b[1]-a[1]).map(([name,val])=>`<div class="bar-row"><label>${esc(name)}</label><div class="bar-track"><div class="bar-fill" style="width:${stock?Math.max(2,val/stock*100):0}%"></div></div><b>${fmt(val)}</b></div>`).join("")||'<p class="empty-note">No stock data.</p>';
+ const taskToday=tk.filter(t=>t.date===today&&!t.done).length;if($("taskCount"))$("taskCount").textContent=fmt(taskToday);
+ if($("taskList"))$("taskList").innerHTML=tk.sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(t=>`<div class="task-row ${t.done?'done':''}"><label><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask('${t.id}',this.checked)"><span>${esc(t.title)}</span></label><small>${esc(t.date||'')}</small><button class="task-delete" onclick="deleteTask('${t.id}')" aria-label="Delete task">×</button></div>`).join("")||'<p class="empty-note">No tasks yet.</p>';
+ const q=($("batchSearch")?.value||'').toLowerCase(),stage=$("stageFilter")?.value||'';
+ const filtered=bs.filter(b=>(!q||[batchDisplayLabel(b),b.variety,b.pottingDate,b.stage].join(' ').toLowerCase().includes(q))&&(!stage||b.stage===stage));
+ $("dashRows").innerHTML=bs.map(b=>`<tr><td>${esc(batchDisplayLabel(b))}</td><td>${esc(b.variety)}</td><td>${esc(b.pottingDate)}</td><td><span class="pill">${esc(b.stage||'Propagator')}</span></td><td>${fmt(batchStock(b))}</td><td>${esc(b.propagatorEnd||'')}</td></tr>`).join('')||empty(6);
+ $("batchRows").innerHTML=filtered.map(b=>`<tr><td>${esc(batchDisplayLabel(b))}</td><td>${esc(b.variety)}</td><td>${esc(b.pottingDate)}</td><td>${fmt(b.initialCount)}</td><td>${fmt(batchStock(b))}</td><td>${esc(b.stage)}</td><td><button class="small-btn" onclick="openBatch('${b.id}')">Manage</button></td></tr>`).join('')||empty(7);
+ const opts=bs.map(b=>`<option value="${b.id}">${esc(batchDisplayLabel(b))} — ${fmt(batchStock(b))} plants</option>`).join('');$("saleBatch").innerHTML=opts;$('appBatch').innerHTML=opts;
+ $("salesRows").innerHTML=ss.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel)}</td><td>${esc(x.buyer||'')}</td><td>${fmt(x.quantity)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')||empty(5);
+ $("appRows").innerHTML=apps.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel)}</td><td>${esc(x.type)}</td><td>${esc(x.product)}</td><td>${esc(x.quantity)} ${esc(x.unit||'')}</td><td>${esc(x.notes||'')}</td></tr>`).join('')||empty(6);
+ $("teamCards").innerHTML=ts.map(x=>`<article class="team-card"><b>${esc(x.name)}</b><span>${esc(x.role)}</span><small>${esc(x.phone||'')}</small></article>`).join('')||'<p>No team members added yet.</p>';
+ $("reportSummary").innerHTML=`<div class="report-grid"><p>Total batches: <b>${bs.length}</b></p><p>Available plants: <b>${fmt(stock)}</b></p><p>Nursery stock: <b>${fmt(nurseryStock)}</b></p><p>Sales records: <b>${ss.length}</b></p><p>Total sold: <b>${fmt(sold)}</b></p><p>Applications: <b>${apps.length}</b></p><p>Propagators occupied: <b>${getPropagatorCount()} / 3</b></p></div>`;
+ if($('varietyReport'))$('varietyReport').innerHTML=Object.entries(varieties).map(([v,n])=>`<p class="history-line"><b>${esc(v)}</b> — ${fmt(n)} plants</p>`).join('')||'<p>No stock yet.</p>';
+}
+window.toggleTask=async(id,done)=>{try{await path(`tasks/${id}`).update({done,updatedAt:Date.now()});}catch(err){notify(err.message,true)}};
+window.deleteTask=async id=>{if(!confirm('Delete this task?'))return;try{await path(`tasks/${id}`).remove();notify('Task deleted.')}catch(err){notify(err.message,true)}};
+$('taskForm').onsubmit=async e=>{e.preventDefault();const title=$('taskTitle').value.trim(),date=$('taskDate').value;if(!title)return;try{await path('tasks').push({title,date,done:false,createdAt:Date.now()});e.target.reset();$('taskDate').value=today;notify('Task added.')}catch(err){notify(err.message,true)}};
+$('batchSearch').addEventListener('input',render);$('stageFilter').addEventListener('change',render);
+$('taskDate').value=today;
+// New batches occupy one free physical Propagator automatically. Existing batches can be assigned from Manage.
+$('batchForm').onsubmit=async e=>{e.preventDefault();const propNo=getFreePropagator();if(!propNo)return notify('Propagator තුනම occupied. එකක් Nursery වෙත move කරලා නැවත උත්සාහ කරන්න.',true);const variety=$('variety').value,batchNo=Number($('batchNo').value),pottingDate=$('pottingDate').value,initialCount=Number($('initialCount').value);const data={variety,batchNo,pottingDate,initialCount,stage:'Propagator',propagatorNo:propNo,propagatorEnd:dateAdd(pottingDate,14),adjustmentTotal:0,soldTotal:0,notes:$('batchNotes').value,createdAt:Date.now()};try{const r=await path('batches').push(data);await path(`history/${r.key}`).push({type:'Potting',date:pottingDate,quantity:initialCount,unit:'plants',notes:`Propagator ${propNo}`,createdAt:Date.now()});e.target.reset();$('pottingDate').value=today;notify(`Batch saved. Assigned to Propagator ${propNo}.`)}catch(err){notify(err.message,true)}};
+window.openBatch=id=>{const b=batches[id];if(!b)return;const box=$('batchDetail');box.classList.remove('hidden');box.innerHTML=`<div class="panel-head"><h3>${esc(batchDisplayLabel(b))} — Batch Management</h3><button class="small-btn" onclick="document.getElementById('batchDetail').classList.add('hidden')">Close</button></div><p>Potting: ${esc(b.pottingDate)} | Propagator end: ${esc(b.propagatorEnd)} | Available: <b>${fmt(batchStock(b))}</b></p><form id="propAssignForm" class="form-grid"><label>Physical Propagator<select id="propAssign"><option value="0">Unassigned / Nursery</option><option value="1">Propagator 1</option><option value="2">Propagator 2</option><option value="3">Propagator 3</option></select></label><button class="primary">Save Assignment</button></form><form id="adjustForm" class="form-grid"><label>Action<select id="adjType"><option value="Nursery Count">Propagator Count / Move to Nursery</option><option value="Stock Add">Add stock</option><option value="Stock Loss">Record loss</option><option value="Correction">Stock correction (+/-)</option></select></label><label>Quantity<input id="adjQty" type="number" required></label><label>Date<input id="adjDate" type="date" value="${today}" required></label><label>Notes<input id="adjNotes"></label><button class="primary">Save Stock Update</button></form><div id="historyRows"></div>`;
+ $('propAssign').value=String(b.propagatorNo||0);path(`history/${id}`).once('value').then(s=>{const h=values(s.val()).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));$('historyRows').innerHTML='<h4>Batch History</h4>'+h.map(x=>`<p class="history-line">${esc(x.date)} · ${esc(x.type)} · ${esc(x.quantity)} ${esc(x.unit||'')} · ${esc(x.notes||'')}</p>`).join('')});
+ $('propAssignForm').onsubmit=async e=>{e.preventDefault();const n=Number($('propAssign').value);if(n&&occupiedPropagators(id).includes(n))return notify(`Propagator ${n} දැනට වෙනත් batch එකකට assign කරලා.`,true);try{await path(`batches/${id}`).update({propagatorNo:n||null,stage:n?'Propagator':'Nursery',lastUpdated:Date.now()});await path(`history/${id}`).push({type:'Propagator Assignment',date:today,quantity:0,unit:'',notes:n?`Assigned Propagator ${n}`:'Unassigned / Nursery',createdAt:Date.now()});notify('Assignment saved.')}catch(err){notify(err.message,true)}};
+ $('adjustForm').onsubmit=async e=>{e.preventDefault();const type=$('adjType').value,q=Number($('adjQty').value),date=$('adjDate').value;if(!q)return notify('Quantity එක ඇතුළත් කරන්න.',true);let delta=type==='Stock Loss'?-Math.abs(q):type==='Correction'?q:Math.abs(q);if(type==='Nursery Count'){if(q>Number(b.initialCount||0)+Number(b.adjustmentTotal||0))return notify('Count එක ආරම්භක/වත්මන් ගණනට වඩා වැඩියි. Correction භාවිතා කරන්න.',true);delta=q-(Number(b.initialCount||0)+Number(b.adjustmentTotal||0));}if(batchStock(b)+delta<0)return notify('Stock එක negative වෙන්න බැහැ.',true);try{await path(`batches/${id}`).update({adjustmentTotal:Number(b.adjustmentTotal||0)+delta,stage:type==='Nursery Count'?'Nursery':b.stage,propagatorNo:type==='Nursery Count'?null:b.propagatorNo||null,lastUpdated:Date.now()});await path(`history/${id}`).push({type,date,quantity:q,unit:'plants',notes:$('adjNotes').value,delta,createdAt:Date.now()});notify('Stock updated. Propagator released if moved to Nursery.')}catch(err){notify(err.message,true)}};
+};
+function downloadCsv(filename,rows){const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+$('exportCsv').onclick=()=>downloadCsv('banana-nursery-batches.csv',[['Batch','Variety','Batch No','Potting Date','Initial Count','Available','Stage','Propagator'],...values(batches).map(b=>[batchDisplayLabel(b),b.variety,b.batchNo,b.pottingDate,b.initialCount,batchStock(b),b.stage,b.propagatorNo||''])]);
+$('exportSalesCsv').onclick=()=>downloadCsv('banana-nursery-sales.csv',[['Date','Batch','Buyer','Quantity','Notes'],...values(sales).map(x=>[x.date,batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel,x.buyer,x.quantity,x.notes])]);
+$('exportAppsCsv').onclick=()=>downloadCsv('banana-nursery-applications.csv',[['Date','Batch','Type','Product','Quantity','Unit','Notes'],...values(applications).map(x=>[x.date,batches[x.batchId]?batchDisplayLabel(batches[x.batchId]):x.batchLabel,x.type,x.product,x.quantity,x.unit,x.notes])]);
+$('backupJson').onclick=()=>{const payload={backupName:'Medalanda Banana Nursery',backupDate:new Date().toISOString(),batches,sales,applications,team,tasks};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`medalanda-nursery-backup-${today}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Backup file downloaded. Firebase data was not changed.')};
